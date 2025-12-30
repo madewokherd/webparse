@@ -201,10 +201,98 @@ def tokenparse_html_script(data: TokenParseState, info: dict) -> tuple[TokenPars
             raise ParseError(f"expected data or closing script tag, got token kind={next_token.kind}, tag={next_token.tag}")
         data.skiptoken()
 
+    if script.get('type', '').endswith('+json') and 'content' in script:
+        script['json'] = json.loads(script['content'])
+        
+        if script['type'] == 'application/ld+json':
+            if 'json_ld' not in info:
+                info['json_ld'] = []
+            info['json_ld'].extend(script['json'])
+
+            return data, info
+
     if 'scripts' not in info:
         info['scripts'] = []
     info['scripts'].append(script)
     return data, info
+
+def object_matches_ld(obj: dict, ld: dict):
+    if obj.get('name') == ld.get('name'):
+        return True
+    obj_urls = set(([obj['url']] if 'url' in obj else []) + (obj.get('sameAs') or []))
+    ld_urls = set(([ld['url']] if 'url' in ld else []) + (ld.get('sameAs') or []))
+    if obj_urls & ld_urls:
+        return True
+    return False
+
+def fill_from_json_ld(info: dict, ld: list) -> dict:
+    # This is really complicated. We don't want to make additional requests or get bogged down in details, so just handle simple cases.
+    if len(ld) != 1:
+        # Nope, too complicated.
+        return info
+
+    ld = ld[0]
+
+    if 'main_content' not in info:
+        info['main_content'] = {}
+    main_content = info['main_content']
+
+    main_content['json_ld'] = ld
+
+    if '@type' in ld and isinstance(ld['@type'], list) and 'kind' not in main_content:
+        typ = ld['@type']
+        if 'Article' in typ or 'http://schema.org/Article' in typ or 'https://schema.org/Article' in typ:
+            main_content['kind'] = 'article'
+
+    if 'headline' in ld and isinstance(ld['headline'], str) and 'headline' not in main_content:
+        main_content['headline'] = ld['headline']
+        if 'title' not in main_content:
+            main_content['title'] = ld['headline']
+
+    if 'datePublished' in ld and isinstance(ld['datePublished'], str) and 'datePublished' not in main_content:
+        main_content['datePublished'] = ld['datePublished']
+
+    if 'dateModified' in ld and isinstance(ld['dateModified'], str) and 'dateModified' not in main_content:
+        main_content['dateModified'] = ld['dateModified']
+
+    if 'description' in ld and isinstance(ld['description'], str) and 'description' not in main_content:
+        main_content['description'] = {'text': ld['description']}
+
+    if 'author' in ld and isinstance(ld['author'], list) and ld['author']:
+        if 'author' not in main_content:
+            main_content['author'] = []
+        for author in ld['author']:
+            for orig_author in main_content['author']:
+                if object_matches_ld(orig_author, author):
+                    break
+            else:
+                orig_author = {}
+                main_content['author'].append(orig_author)
+            if 'name' in author:
+                orig_author['name'] = author['name']
+            if 'url' in author:
+                orig_author['url'] = author['url']
+                orig_author['url_has_info'] = ['unknown']
+            orig_author['json_ld'] = author
+
+    if 'publisher' in ld and isinstance(ld['publisher'], dict) and ld['publisher']:
+        if 'containing_feeds' not in main_content:
+            main_content['containing_feeds'] = []
+        pub = ld['publisher']
+        for orig_feed in main_content['containing_feeds']:
+            if object_matches_ld(orig_feed, pub):
+                break
+        else:
+            orig_feed = {}
+            main_content['containing_feeds'].append(orig_feed)
+        if 'name' in pub:
+            orig_feed['name'] = pub['name']
+        if 'url' in pub:
+            orig_feed['url'] = pub['url']
+            orig_feed['url_has_info'] = ['unknown']
+        orig_feed['json_ld'] = pub
+
+    return info
 
 def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenParseState, dict]:
     token = data.peektoken()
@@ -265,6 +353,8 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
 def tokenparse_html(data: TokenParseState, info: dict) -> dict:
     while data.start < data.end:
         data, info = tokenparse_html_toplevel(data, info)
+    if 'json_ld' in info:
+        info = fill_from_json_ld(info, info['json_ld'])
     return data, info
 
 def strparse_html(data: StrParseState, info: dict) -> dict:
