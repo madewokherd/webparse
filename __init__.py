@@ -183,6 +183,23 @@ def append_object(data: dict, name: str, item):
         data[name] = []
     data[name].append(item)
 
+def tokenparse_html_title(data: TokenParseState, info: dict) -> tuple[TokenParseState, dict]:
+    open_token = data.peektoken()
+    data = data.skiptoken()
+
+    content_token = data.peektoken()
+    if content_token.kind != 'data':
+        raise UnexpectedDataError(f'Expected data, got {content_token.kind}')
+    data = data.skiptoken()
+
+    close_token = data.peektoken()
+    if close_token.kind != 'end' or close_token.tag != 'title':
+        raise UnexpectedDataError(f'Expected closing title tag, got kind={close_token.kind}, tag={close_token.tag}')
+    data = data.skiptoken()
+
+    get_object(info, 'html')['title'] = content_token.data.strip()
+    return data, info
+
 def tokenparse_html_script(data: TokenParseState, info: dict) -> tuple[TokenParseState, dict]:
     open_token = data.peektoken()
     data = data.skiptoken()
@@ -433,6 +450,14 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
                 if 'base_url' not in info:
                     info['base_url'] = token.attrs['content']
             return data.skiptoken(), info
+        if token.tag == 'title':
+            try:
+                data, info = tokenparse_html_title(data, info)
+                return data.skiptoken(), info
+            except ParseError:
+                if 'errors' not in info:
+                    info['errors'] = []
+                info['errors'].append(traceback.format_exception())
     if token.kind == 'end':
         if token.tag in ('html', 'head', 'link', 'meta'):
             return data.skiptoken(), info
@@ -461,6 +486,9 @@ def tokenparse_html(data: TokenParseState, info: dict) -> dict:
         data, info = tokenparse_html_toplevel(data, info)
     if 'json_ld' in info:
         info = fill_from_json_ld(info, info['json_ld'])
+    if 'title' not in info.get('main_content', ()) and 'title' in info.get('html', ()):
+        # This is likely to have nothing to do with the content, so it's a last resort
+        get_object(info, 'main_content')['title'] = info['html']['title']
     return data, info
 
 def strparse_html(data: StrParseState, info: dict) -> dict:
