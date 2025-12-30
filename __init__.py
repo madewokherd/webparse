@@ -187,6 +187,13 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
                 info['html_unknownattrs'].append((attr, value))
                 continue
             return data.skiptoken(), info
+        if token.tag == 'head':
+            for attr, value in token.attr_seq:
+                if 'head_attrs' not in info:
+                    info['head_attrs'] = []
+                info['head_attrs'].append((attr, value))
+                continue
+            return data.skiptoken(), info
     if token.kind == 'end':
         if token.tag == 'html':
             return data.skiptoken(), info
