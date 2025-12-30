@@ -6,6 +6,7 @@ import json
 import sys
 import traceback
 import typing
+import urllib.parse
 
 class ParseError(Exception):
     pass
@@ -325,6 +326,65 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
                 if 'errors' not in info:
                     info['errors'] = []
                 info['errors'].append(traceback.format_exception())
+        if token.tag == 'link':
+            if 'html_links' not in info:
+                info['html_links'] = []
+            link = {}
+            for attr, value in token.attr_seq:
+                if attr == 'rel':
+                    link['rel'] = value
+                    continue
+                if attr == 'href':
+                    link['href'] = value
+                    continue
+                if attr == 'type':
+                    link['type'] = value
+                    continue
+                if attr == 'title':
+                    link['title'] = value
+                    continue
+                if 'attrs' not in link:
+                    link['attrs'] = []
+                link['attrs'].append((attr, value))
+            info['html_links'].append(link)
+            if link.get('rel') == 'canonical' and 'url' not in info and 'href' in link:
+                info['url'] = link['href']
+            if link.get('rel') == 'canonical' and 'base_url' not in info and 'href' in link:
+                info['base_url'] = link['href']
+            if link.get('rel') == 'alternate' and link.get('type') == 'application/rss+xml' and 'href' in link:
+                href = urllib.parse.urljoin(info.get('base_url', ''), link['href'])
+                if 'main_content' not in info:
+                    info['main_content'] = {}
+                main_content = info['main_content']
+                feed = {
+                    'url': href,
+                    'url_has_info': ['name', 'description', 'unknown'],
+                    'html_link': link,
+                    }
+                if 'title' in link:
+                    feed['name'] = link['title']
+                else:
+                    feed['generic_name'] = "RSS Feed"
+                if 'containing_feeds' not in main_content:
+                    main_content['containing_feeds'] = []
+                main_content['containing_feeds'].append(feed)
+            if link.get('rel') in ('icon', 'shortcut icon', 'apple-touch-icon') and 'href' in link:
+                if 'sizes' in token.attrs:
+                    if token.attrs['sizes'] == 'any':
+                        this_size = "any"
+                    else:
+                        this_size = int(link.attrs['sizes'].split('x')[0])
+                elif link['rel'] == 'apple-touch-icon':
+                    this_size = 192
+                else:
+                    this_size = 16
+                if 'favicon' not in info or (info['favicon']['size'] != 'any' and (this_size == 'any' or this_size > info['favicon']['size'])):
+                    href = urllib.parse.urljoin(info.get('base_url', ''), link['href'])
+                    info['favicon'] = {
+                        'size': this_size,
+                        'url': href,
+                    }
+            return data.skiptoken(), info
     if token.kind == 'end':
         if token.tag == 'html':
             return data.skiptoken(), info
