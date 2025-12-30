@@ -173,6 +173,16 @@ def parse_sgml_doctype(data: ParseState, info: dict) -> (ParseState, dict):
     data = parse_expect(data, b'>') # TODO: handle external identifier
     return data, info
 
+def get_object(data: dict, name: str) -> dict:
+    if name not in data:
+        data[name] = {}
+    return data[name]
+
+def append_object(data: dict, name: str, item):
+    if name not in data:
+        data[name] = []
+    data[name].append(item)
+
 def tokenparse_html_script(data: TokenParseState, info: dict) -> tuple[TokenParseState, dict]:
     open_token = data.peektoken()
     data = data.skiptoken()
@@ -212,9 +222,7 @@ def tokenparse_html_script(data: TokenParseState, info: dict) -> tuple[TokenPars
 
             return data, info
 
-    if 'scripts' not in info:
-        info['scripts'] = []
-    info['scripts'].append(script)
+    append_object(get_object(info, 'html'), 'scripts', script)
     return data, info
 
 def object_matches(obj: dict, ld: dict):
@@ -324,22 +332,19 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
     if token.kind == 'start':
         if token.tag == 'html':
             for attr, value in token.attr_seq:
-                if attr == 'id' and 'html_id' not in info:
-                    info['html_id'] = value
+                h = get_object(info, 'html')
+                if attr == 'id':
+                    h['html_id'] = value
                     continue
-                if attr == 'class' and 'html_class' not in info:
-                    info['html_class'] = value
+                if attr == 'class':
+                    h['html_class'] = value
                     continue
-                if 'html_unknownattrs' not in info:
-                    info['html_unknownattrs'] = []
-                info['html_unknownattrs'].append((attr, value))
+                append_object(h, 'html_unknown_attrs', (attr, value))
                 continue
             return data.skiptoken(), info
         if token.tag == 'head':
             for attr, value in token.attr_seq:
-                if 'head_attrs' not in info:
-                    info['head_attrs'] = []
-                info['head_attrs'].append((attr, value))
+                append_object(get_object(info, 'html'), 'head_attrs', (attr, value))
                 continue
             return data.skiptoken(), info
         if token.tag == 'script':
@@ -351,8 +356,6 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
                     info['errors'] = []
                 info['errors'].append(traceback.format_exception())
         if token.tag == 'link':
-            if 'html_links' not in info:
-                info['html_links'] = []
             link = {}
             for attr, value in token.attr_seq:
                 if attr == 'rel':
@@ -370,7 +373,7 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
                 if 'attrs' not in link:
                     link['attrs'] = []
                 link['attrs'].append((attr, value))
-            info['html_links'].append(link)
+            append_object(get_object(info, 'html'), 'links', link)
             if link.get('rel') == 'canonical' and 'url' not in info and 'href' in link:
                 info['url'] = link['href']
             if link.get('rel') == 'canonical' and 'base_url' not in info and 'href' in link:
@@ -410,9 +413,7 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
                     }
             return data.skiptoken(), info
         if token.tag == 'meta':
-            if 'html_metas' not in info:
-                info['html_metas'] = []
-            info['html_metas'].append(token.attrs)
+            append_object(get_object(info, 'html'), 'metas', token.attrs)
             name = token.attrs.get('name') or token.attrs.get('http-equiv') or token.attrs.get('itemprop') or token.attrs.get('property')
             if name in ('description', 'og:description') and 'content' in token.attrs:
                 set_main_description(info, {'text': token.attrs['content']})
@@ -433,7 +434,7 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
                     info['base_url'] = token.attrs['content']
             return data.skiptoken(), info
     if token.kind == 'end':
-        if token.tag == 'html':
+        if token.tag in ('html', 'head', 'link', 'meta'):
             return data.skiptoken(), info
     if token.kind == 'decl':
         # Assume the doctype has already been handled
@@ -443,9 +444,7 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
             # whitespace
             return data.skiptoken(), info
     if token.kind == 'comment':
-        if 'html_comments' not in info:
-            info['html_comments'] = []
-        info['html_comments'].append(token.data)
+        append_object(get_object(info, 'html'), 'comments', token.data)
         return data.skiptoken(), info
     # unrecognized data
     data = data.skiptoken()
