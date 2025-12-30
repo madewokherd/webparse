@@ -217,7 +217,7 @@ def tokenparse_html_script(data: TokenParseState, info: dict) -> tuple[TokenPars
     info['scripts'].append(script)
     return data, info
 
-def object_matches_ld(obj: dict, ld: dict):
+def object_matches(obj: dict, ld: dict):
     if obj.get('name') == ld.get('name'):
         return True
     obj_urls = set(([obj['url']] if 'url' in obj else []) + (obj.get('sameAs') or []))
@@ -225,6 +225,26 @@ def object_matches_ld(obj: dict, ld: dict):
     if obj_urls & ld_urls:
         return True
     return False
+
+def add_main_author(info, author):
+    if 'main_content' not in info:
+        info['main_content'] = {}
+    main_content = info['main_content']
+    if 'author' not in main_content:
+        main_content['author'] = []
+    for orig_author in main_content['author']:
+        if object_matches(orig_author, author):
+            break
+    else:
+        orig_author = {}
+        main_content['author'].append(orig_author)
+    for key, val in author.items():
+        if key == 'sameAs' and 'sameAs' in orig_author:
+            for url in val:
+                if url not in orig_author['sameAs']:
+                    orig_author['sameAs'].append(url)
+            continue
+        orig_author[key] = val
 
 def fill_from_json_ld(info: dict, ld: list) -> dict:
     # This is really complicated. We don't want to make additional requests or get bogged down in details, so just handle simple cases.
@@ -256,32 +276,29 @@ def fill_from_json_ld(info: dict, ld: list) -> dict:
     if 'dateModified' in ld and isinstance(ld['dateModified'], str) and 'dateModified' not in main_content:
         main_content['dateModified'] = ld['dateModified']
 
-    if 'description' in ld and isinstance(ld['description'], str) and 'description' not in main_content:
-        main_content['description'] = {'text': ld['description']}
+    if 'description' in ld and isinstance(ld['description'], str):
+        set_main_description(info, {'text': ld['description']})
 
     if 'author' in ld and isinstance(ld['author'], list) and ld['author']:
-        if 'author' not in main_content:
-            main_content['author'] = []
         for author in ld['author']:
-            for orig_author in main_content['author']:
-                if object_matches_ld(orig_author, author):
-                    break
-            else:
-                orig_author = {}
-                main_content['author'].append(orig_author)
+            toplevel_author = {}
             if 'name' in author:
-                orig_author['name'] = author['name']
+                toplevel_author['name'] = author['name']
+            if 'sameAs' in author:
+                toplevel_author['sameAs'] = author['sameAs']
             if 'url' in author:
-                orig_author['url'] = author['url']
-                orig_author['url_has_info'] = ['unknown']
-            orig_author['json_ld'] = author
+                toplevel_author['url'] = author['url']
+                toplevel_author['url_has_info'] = ['unknown']
+            toplevel_author['json_ld'] = author
+
+            add_main_author(info, toplevel_author)
 
     if 'publisher' in ld and isinstance(ld['publisher'], dict) and ld['publisher']:
         if 'containing_feeds' not in main_content:
             main_content['containing_feeds'] = []
         pub = ld['publisher']
         for orig_feed in main_content['containing_feeds']:
-            if object_matches_ld(orig_feed, pub):
+            if object_matches(orig_feed, pub):
                 break
         else:
             orig_feed = {}
@@ -294,6 +311,13 @@ def fill_from_json_ld(info: dict, ld: list) -> dict:
         orig_feed['json_ld'] = pub
 
     return info
+
+def set_main_description(info: dict, description: dict):
+    if 'main_content' not in info:
+        info['main_content'] = {}
+    main_content = info['main_content']
+    if 'description' not in main_content:
+        main_content['description'] = description
 
 def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenParseState, dict]:
     token = data.peektoken()
@@ -384,6 +408,29 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
                         'size': this_size,
                         'url': href,
                     }
+            return data.skiptoken(), info
+        if token.tag == 'meta':
+            if 'html_metas' not in info:
+                info['html_metas'] = []
+            info['html_metas'].append(token.attrs)
+            name = token.attrs.get('name') or token.attrs.get('http-equiv') or token.attrs.get('itemprop') or token.attrs.get('property')
+            if name in ('description', 'og:description') and 'content' in token.attrs:
+                set_main_description(info, {'text': token.attrs['content']})
+            if name == 'sailthru.author' and 'content' in token.attrs:
+                add_main_author(info, {'name': token.attrs['content']})
+            if name == 'og:type' and token.attrs.get('content') == 'article':
+                if 'main_content' not in info:
+                    info['main_content'] = {}
+                info['main_content']['kind'] = 'article'
+            if name == 'og:title' and 'content' in token.attrs:
+                if 'main_content' not in info:
+                    info['main_content'] = {}
+                info['main_content']['title'] = token.attrs['content']
+            if name == 'og:url' and 'content' in token.attrs:
+                if 'url' not in info:
+                    info['url'] = token.attrs['content']
+                if 'base_url' not in info:
+                    info['base_url'] = token.attrs['content']
             return data.skiptoken(), info
     if token.kind == 'end':
         if token.tag == 'html':
