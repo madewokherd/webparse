@@ -204,6 +204,11 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
         if token.data.isspace():
             # whitespace
             return data.skiptoken(), info
+    if token.kind == 'comment':
+        if 'html_comments' not in info:
+            info['html_comments'] = []
+        info['html_comments'].append(token.data)
+        return data.skiptoken(), info
     # unrecognized data
     data = data.skiptoken()
 
