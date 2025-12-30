@@ -4,6 +4,7 @@ import collections
 import html.parser
 import json
 import sys
+import traceback
 import typing
 
 class ParseError(Exception):
@@ -171,6 +172,40 @@ def parse_sgml_doctype(data: ParseState, info: dict) -> (ParseState, dict):
     data = parse_expect(data, b'>') # TODO: handle external identifier
     return data, info
 
+def tokenparse_html_script(data: TokenParseState, info: dict) -> tuple[TokenParseState, dict]:
+    open_token = data.peektoken()
+    data = data.skiptoken()
+
+    script = {}
+    for attr, value in open_token.attr_seq:
+        if attr == 'type':
+            script['type'] = value
+            continue
+        if attr == 'src':
+            script['src'] = value
+            continue
+        if 'attrs' not in script:
+            script['attrs'] = []
+        script['attrs'].append((attr, value))
+
+    next_token = data.peektoken()
+    if next_token.kind == 'data':
+        script['content'] = next_token.data
+        data = data.skiptoken()
+        next_token = data.peektoken()
+        if next_token.kind != 'end' or next_token.tag != 'script':
+            raise ParseError(f"expected closing script tag, got token kind={next_token.kind}, tag={next_token.tag}")
+        data.skiptoken()
+    else:
+        if next_token.kind != 'end' or next_token.tag != 'script':
+            raise ParseError(f"expected data or closing script tag, got token kind={next_token.kind}, tag={next_token.tag}")
+        data.skiptoken()
+
+    if 'scripts' not in info:
+        info['scripts'] = []
+    info['scripts'].append(script)
+    return data, info
+
 def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenParseState, dict]:
     token = data.peektoken()
     if token.kind == 'start':
@@ -194,6 +229,14 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
                 info['head_attrs'].append((attr, value))
                 continue
             return data.skiptoken(), info
+        if token.tag == 'script':
+            try:
+                data, info = tokenparse_html_script(data, info)
+                return data.skiptoken(), info
+            except ParseError:
+                if 'errors' not in info:
+                    info['errors'] = []
+                info['errors'].append(traceback.format_exception())
     if token.kind == 'end':
         if token.tag == 'html':
             return data.skiptoken(), info
