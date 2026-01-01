@@ -386,23 +386,31 @@ def set_main_description(info: dict, description: dict):
         main_content['description'] = description
 
 def tokenparse_html_contentlist(data: TokenParseState, info: dict, parent: dict, closingtag: str) -> tuple[TokenParseState, dict, list]:
-    result = []
-    unknowns = []
-    token = data.peektoken()
-    while data.peektoken().kind != 'end' or data.peektoken().tag != closingtag:
-        try:
-            data, info, content = tokenparse_html_content(data, info, parent)
-            if content is not None:
-                result.append(content)
-        except UnrecognizedDataError:
-            result.append({'kind': token.kind, 'tag': token.tag, 'attrs': token.attr_seq, 'data': token.data})
-            data = data.skiptoken()
-        except ParseError:
-            append_object(info, 'errors', traceback.format_exc())
-            data = data.skiptoken()
+    append_object(info, '_open_tags', closingtag)
+    try:
+        result = []
+        unknowns = []
         token = data.peektoken()
-    data = data.skiptoken() # closing tag
-    return data, info, result
+        while data.peektoken().kind != 'end' or data.peektoken().tag not in info['_open_tags']:
+            try:
+                data, info, content = tokenparse_html_content(data, info, parent)
+                if content is not None:
+                    result.append(content)
+            except UnrecognizedDataError:
+                result.append({'kind': token.kind, 'tag': token.tag, 'attrs': token.attr_seq, 'data': token.data})
+                data = data.skiptoken()
+            except ParseError:
+                append_object(info, 'errors', traceback.format_exc())
+                data = data.skiptoken()
+            token = data.peektoken()
+        token = data.peektoken()
+        if token.kind == 'end' and token.tag == closingtag:
+            data = data.skiptoken()
+        else:
+            result.append({'kind': 'error', 'error': 'No closing tag'})
+        return data, info, result
+    finally:
+        info['_open_tags'].pop(-1)
 
 def tokenparse_svg(data: TokenParseState, info: dict, parent: dict) -> tuple[TokenParseState, dict, dict]:
     token = data.peektoken()
@@ -646,6 +654,8 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
 def tokenparse_html(data: TokenParseState, info: dict) -> dict:
     while data.start < data.end:
         data, info = tokenparse_html_toplevel(data, info)
+    if '_open_tags' in info:
+        del info['_open_tags']
     if 'json_ld' in info:
         info = fill_from_json_ld(info, info['json_ld'])
     if 'title' not in info.get('main_content', ()) and 'title' in info.get('html', ()):
