@@ -223,11 +223,11 @@ def tokenparse_html_script(data: TokenParseState, info: dict) -> tuple[TokenPars
         next_token = data.peektoken()
         if next_token.kind != 'end' or next_token.tag != 'script':
             raise ParseError(f"expected closing script tag, got token kind={next_token.kind}, tag={next_token.tag}")
-        data.skiptoken()
+        data = data.skiptoken()
     else:
         if next_token.kind != 'end' or next_token.tag != 'script':
             raise ParseError(f"expected data or closing script tag, got token kind={next_token.kind}, tag={next_token.tag}")
-        data.skiptoken()
+        data = data.skiptoken()
 
     if script.get('type', '').endswith('+json') and 'content' in script:
         script['json'] = json.loads(script['content'])
@@ -367,7 +367,7 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
         if token.tag == 'script':
             try:
                 data, info = tokenparse_html_script(data, info)
-                return data.skiptoken(), info
+                return data, info
             except ParseError:
                 if 'errors' not in info:
                     info['errors'] = []
@@ -453,7 +453,7 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
         if token.tag == 'title':
             try:
                 data, info = tokenparse_html_title(data, info)
-                return data.skiptoken(), info
+                return data, info
             except ParseError:
                 if 'errors' not in info:
                     info['errors'] = []
