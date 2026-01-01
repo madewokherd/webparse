@@ -442,6 +442,15 @@ def tokenparse_html_content(data: TokenParseState, info: dict, parent: dict) -> 
             return data, info, result
         if token.tag == 'svg':
             return tokenparse_svg(data, info, parent)
+        if token.tag == 'header':
+            data = data.skiptoken()
+            result = {'kind': 'header'}
+            unknown_token_list = []
+            if token.attr_seq:
+                result['attrs'] = token.attr_seq
+            data, info, contentlist = tokenparse_html_contentlist(data, info, result, 'header')
+            result['contents'] = contentlist
+            return data, info, result
     raise UnrecognizedDataError()
 
 def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenParseState, dict]:
