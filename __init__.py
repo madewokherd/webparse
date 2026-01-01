@@ -470,6 +470,18 @@ def tokenparse_html_content(data: TokenParseState, info: dict, parent: dict) -> 
             data, info, contentlist = tokenparse_html_contentlist(data, info, result, 'header')
             result['contents'] = contentlist
             return data, info, result
+        if token.tag == 'button':
+            data = data.skiptoken()
+            result = {'kind': 'button'}
+            unknown_token_list = []
+            if token.attr_seq:
+                result['attrs'] = token.attr_seq
+            data, info, contentlist = tokenparse_html_contentlist(data, info, result, 'button')
+            result['contents'] = contentlist
+            return data, info, result
+    if token.kind == 'data' and token.data.isspace() and not parent.get('preserve_whitespace'):
+        data = data.skiptoken()
+        return data, info, None
     raise UnrecognizedDataError()
 
 def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenParseState, dict]:
