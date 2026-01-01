@@ -242,6 +242,46 @@ def tokenparse_html_script(data: TokenParseState, info: dict) -> tuple[TokenPars
     append_object(get_object(info, 'html'), 'scripts', script)
     return data, info
 
+def tokenparse_html_style(data: TokenParseState, info: dict) -> tuple[TokenParseState, dict]:
+    open_token = data.peektoken()
+    data = data.skiptoken()
+
+    style = {}
+    for attr, value in open_token.attr_seq:
+        if attr == 'blocking':
+            style['blocking'] = value
+            continue
+        if attr == 'media':
+            style['media'] = value
+            continue
+        if attr == 'nonce':
+            style['nonce'] = value
+            continue
+        if attr == 'title':
+            style['title'] = value
+            continue
+        if attr == 'type':
+            style['type'] = value
+            continue
+        if 'attrs' not in style:
+            style['attrs'] = []
+        style['attrs'].append((attr, value))
+
+    next_token = data.peektoken()
+    data = data.skiptoken()
+    if next_token.kind != 'data':
+        raise ParseError(f"expected data, got token kind={next_token.kind}, tag={next_token.tag}")
+
+    style['content'] = next_token.data
+
+    next_token = data.peektoken()
+    if next_token.kind != 'end' or next_token.tag != 'style':
+        raise ParseError(f"expected closing style tag, got token kind={next_token.kind}, tag={next_token.tag}")
+    data = data.skiptoken()
+
+    append_object(get_object(info, 'html'), 'styles', style)
+    return data, info
+
 def object_matches(obj: dict, ld: dict):
     if obj.get('name') == ld.get('name'):
         return True
@@ -453,6 +493,14 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
         if token.tag == 'title':
             try:
                 data, info = tokenparse_html_title(data, info)
+                return data, info
+            except ParseError:
+                if 'errors' not in info:
+                    info['errors'] = []
+                info['errors'].append(traceback.format_exception())
+        if token.tag == 'style':
+            try:
+                data, info = tokenparse_html_style(data, info)
                 return data, info
             except ParseError:
                 if 'errors' not in info:
