@@ -403,6 +403,30 @@ def tokenparse_html_contentlist(data: TokenParseState, info: dict, parent: dict,
     data = data.skiptoken() # closing tag
     return data, info, result
 
+def tokenparse_svg(data: TokenParseState, info: dict, parent: dict) -> tuple[TokenParseState, dict, dict]:
+    token = data.peektoken()
+    data = data.skiptoken()
+    result = {'kind': 'svg'}
+    unknown_token_list = []
+    if token.attr_seq:
+        for key, value in token.attr_seq:
+            if key in ('baseprofile', 'height', 'preserveAspectRatio', 'version', 'viewbox', 'width', 'x', 'y'):
+                result[key] = value
+        else:
+            append_object(result, 'attrs', (key, value))
+    contents = []
+    while data.peektoken().kind != 'end' or data.peektoken().tag != 'svg':
+        token = data.peektoken()
+        if token.kind == 'start' and token.tag == 'svg':
+            data, info, nested = tokenparse_svg(data, info, result)
+            contents.append(nested)
+        else:
+            contents.append({'kind': token.kind, 'tag': token.tag, 'attrs': token.attr_seq, 'data': token.data})
+            data = data.skiptoken()
+    data = data.skiptoken()
+    result['contents'] = contents
+    return data, info, result
+
 def tokenparse_html_content(data: TokenParseState, info: dict, parent: dict) -> tuple[TokenParseState, dict, dict | None]:
     # here we handle anything that could potentially be content: divs, paragraphs, spans, text, images
     token = data.peektoken()
@@ -416,6 +440,8 @@ def tokenparse_html_content(data: TokenParseState, info: dict, parent: dict) -> 
             data, info, contentlist = tokenparse_html_contentlist(data, info, result, 'noscript')
             result['contents'] = contentlist
             return data, info, result
+        if token.tag == 'svg':
+            return tokenparse_svg(data, info, parent)
     raise UnrecognizedDataError()
 
 def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenParseState, dict]:
