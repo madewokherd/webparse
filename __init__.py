@@ -438,6 +438,11 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
                 append_object(get_object(info, 'html'), 'head_attrs', (attr, value))
                 continue
             return data.skiptoken(), info
+        if token.tag == 'body':
+            for attr, value in token.attr_seq:
+                append_object(get_object(info, 'html'), 'body_attrs', (attr, value))
+                continue
+            return data.skiptoken(), info
         if token.tag == 'script':
             try:
                 data, info = tokenparse_html_script(data, info)
@@ -541,7 +546,7 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
                     info['errors'] = []
                 info['errors'].append(traceback.format_exception())
     if token.kind == 'end':
-        if token.tag in ('html', 'head', 'link', 'meta'):
+        if token.tag in ('html', 'head', 'link', 'meta', 'body'):
             return data.skiptoken(), info
     if token.kind == 'decl':
         # Assume the doctype has already been handled
