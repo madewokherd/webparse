@@ -431,6 +431,15 @@ def tokenparse_html_content(data: TokenParseState, info: dict, parent: dict) -> 
     # here we handle anything that could potentially be content: divs, paragraphs, spans, text, images
     token = data.peektoken()
     if token.kind == 'start':
+        if token.tag == 'a':
+            data = data.skiptoken()
+            result = {'kind': 'anchor'}
+            unknown_token_list = []
+            if token.attr_seq:
+                result['attrs'] = token.attr_seq
+            data, info, contentlist = tokenparse_html_contentlist(data, info, result, 'a')
+            result['contents'] = contentlist
+            return data, info, result
         if token.tag == 'noscript':
             data = data.skiptoken()
             result = {'kind': 'noscript'}
