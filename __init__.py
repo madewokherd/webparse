@@ -295,11 +295,11 @@ def fill_from_json_ld(info: dict, ld: list) -> dict:
         if 'title' not in main_content:
             main_content['title'] = ld['headline']
 
-    if 'datePublished' in ld and isinstance(ld['datePublished'], str) and 'datePublished' not in main_content:
-        main_content['datePublished'] = ld['datePublished']
+    if 'datePublished' in ld and isinstance(ld['datePublished'], str) and 'date_published' not in main_content:
+        main_content['date_published'] = ld['datePublished']
 
-    if 'dateModified' in ld and isinstance(ld['dateModified'], str) and 'dateModified' not in main_content:
-        main_content['dateModified'] = ld['dateModified']
+    if 'dateModified' in ld and isinstance(ld['dateModified'], str) and 'date_modified' not in main_content:
+        main_content['date_modified'] = ld['dateModified']
 
     if 'description' in ld and isinstance(ld['description'], str):
         set_main_description(info, {'text': ld['description']})
