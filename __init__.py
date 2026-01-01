@@ -134,6 +134,7 @@ class TokenParseState(TokenParseState_):
     def peektoken(self) -> int | None:
         if self.start < self.end:
             return self.buffer[self.start]
+        raise UnexpectedEndOfFileError()
 
     def skiptoken(self) -> ParseState:
         if self.start < self.end:
@@ -397,7 +398,7 @@ def tokenparse_html_contentlist(data: TokenParseState, info: dict, parent: dict,
             result.append({'kind': token.kind, 'tag': token.tag, 'attrs': token.attr_seq, 'data': token.data})
             data = data.skiptoken()
         except ParseError:
-            append_object(info, 'errors', traceback.format_exception())
+            append_object(info, 'errors', traceback.format_exc())
             data = data.skiptoken()
         token = data.peektoken()
     data = data.skiptoken() # closing tag
@@ -503,7 +504,7 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
             except ParseError:
                 if 'errors' not in info:
                     info['errors'] = []
-                info['errors'].append(traceback.format_exception())
+                info['errors'].append(traceback.format_exc())
         if token.tag == 'link':
             link = {}
             for attr, value in token.attr_seq:
@@ -589,7 +590,7 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
             except ParseError:
                 if 'errors' not in info:
                     info['errors'] = []
-                info['errors'].append(traceback.format_exception())
+                info['errors'].append(traceback.format_exc())
         if token.tag == 'style':
             try:
                 data, info = tokenparse_html_style(data, info)
@@ -597,7 +598,7 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
             except ParseError:
                 if 'errors' not in info:
                     info['errors'] = []
-                info['errors'].append(traceback.format_exception())
+                info['errors'].append(traceback.format_exc())
     if token.kind == 'end':
         if token.tag in ('html', 'head', 'link', 'meta', 'body'):
             return data.skiptoken(), info
@@ -612,7 +613,7 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
     except UnrecognizedDataError:
         pass
     except ParseError:
-        append_object(info, 'errors', traceback.format_exception())
+        append_object(info, 'errors', traceback.format_exc())
     if token.kind == 'data':
         if token.data.isspace():
             # whitespace
