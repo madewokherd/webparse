@@ -384,6 +384,40 @@ def set_main_description(info: dict, description: dict):
     if 'description' not in main_content:
         main_content['description'] = description
 
+def tokenparse_html_contentlist(data: TokenParseState, info: dict, parent: dict, closingtag: str) -> tuple[TokenParseState, dict, list]:
+    result = []
+    unknowns = []
+    token = data.peektoken()
+    while data.peektoken().kind != 'end' or data.peektoken().tag != closingtag:
+        try:
+            data, info, content = tokenparse_html_content(data, info, parent)
+            if content is not None:
+                result.append(content)
+        except UnrecognizedDataError:
+            result.append({'kind': token.kind, 'tag': token.tag, 'attrs': token.attr_seq, 'data': token.data})
+            data = data.skiptoken()
+        except ParseError:
+            append_object(info, 'errors', traceback.format_exception())
+            data = data.skiptoken()
+        token = data.peektoken()
+    data = data.skiptoken() # closing tag
+    return data, info, result
+
+def tokenparse_html_content(data: TokenParseState, info: dict, parent: dict) -> tuple[TokenParseState, dict, dict | None]:
+    # here we handle anything that could potentially be content: divs, paragraphs, spans, text, images
+    token = data.peektoken()
+    if token.kind == 'start':
+        if token.tag == 'noscript':
+            data = data.skiptoken()
+            result = {'kind': 'noscript'}
+            unknown_token_list = []
+            if token.attr_seq:
+                result['attrs'] = token.attr_seq
+            data, info, contentlist = tokenparse_html_contentlist(data, info, result, 'noscript')
+            result['contents'] = contentlist
+            return data, info, result
+    raise UnrecognizedDataError()
+
 def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenParseState, dict]:
     token = data.peektoken()
     if token.kind == 'start':
@@ -512,6 +546,15 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
     if token.kind == 'decl':
         # Assume the doctype has already been handled
         return data.skiptoken(), info
+    try:
+        data, info, new_content = tokenparse_html_content(data, info, info)
+        if new_content is not None:
+            append_object(get_object(info, 'html'), 'content', new_content)
+        return data, info
+    except UnrecognizedDataError:
+        pass
+    except ParseError:
+        append_object(info, 'errors', traceback.format_exception())
     if token.kind == 'data':
         if token.data.isspace():
             # whitespace
