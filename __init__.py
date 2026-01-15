@@ -360,15 +360,15 @@ def fill_from_json_ld(info: dict, ld: list) -> dict:
             add_main_author(info, toplevel_author)
 
     if 'publisher' in ld and isinstance(ld['publisher'], dict) and ld['publisher']:
-        if 'containing_feeds' not in main_content:
-            main_content['containing_feeds'] = []
+        if 'nav_links' not in main_content:
+            main_content['nav_links'] = []
         pub = ld['publisher']
-        for orig_feed in main_content['containing_feeds']:
+        for orig_feed in main_content['nav_links']:
             if object_matches(orig_feed, pub):
                 break
         else:
             orig_feed = {}
-            main_content['containing_feeds'].append(orig_feed)
+            main_content['nav_links'].append(orig_feed)
         if 'name' in pub:
             orig_feed['name'] = pub['name']
         if 'url' in pub:
@@ -562,9 +562,7 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
                     feed['name'] = link['title']
                 else:
                     feed['generic_name'] = "RSS Feed"
-                if 'containing_feeds' not in main_content:
-                    main_content['containing_feeds'] = []
-                main_content['containing_feeds'].append(feed)
+                append_object(main_content, 'nav_links', feed)
             if link.get('rel') in ('icon', 'shortcut icon', 'apple-touch-icon') and 'href' in link:
                 if 'sizes' in token.attrs:
                     if token.attrs['sizes'] == 'any':
