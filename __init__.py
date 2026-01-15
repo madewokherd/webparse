@@ -184,6 +184,12 @@ def append_object(data: dict, name: str, item):
         data[name] = []
     data[name].append(item)
 
+def add_function(data: dict, function: str):
+    if 'function' not in data:
+        data['function'] = []
+    if function not in data['function']:
+        data['function'].append(function)
+
 def tokenparse_html_title(data: TokenParseState, info: dict) -> tuple[TokenParseState, dict]:
     open_token = data.peektoken()
     data = data.skiptoken()
@@ -369,6 +375,7 @@ def fill_from_json_ld(info: dict, ld: list) -> dict:
         else:
             orig_feed = {}
             main_content['nav_links'].append(orig_feed)
+        add_function(orig_feed, 'publisher')
         if 'name' in pub:
             orig_feed['name'] = pub['name']
         if 'url' in pub:
@@ -562,6 +569,7 @@ def tokenparse_html_toplevel(data: TokenParseState, info: dict) -> tuple[TokenPa
                     feed['name'] = link['title']
                 else:
                     feed['generic_name'] = "RSS Feed"
+                feed['function'] = ['feed']
                 append_object(main_content, 'nav_links', feed)
             if link.get('rel') in ('icon', 'shortcut icon', 'apple-touch-icon') and 'href' in link:
                 if 'sizes' in token.attrs:
