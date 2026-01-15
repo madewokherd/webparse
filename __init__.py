@@ -184,6 +184,12 @@ def append_object(data: dict, name: str, item):
         data[name] = []
     data[name].append(item)
 
+function_names = {
+    'home': 'Home Page',
+    'publisher': 'Publisher',
+    'feed': 'Syndication Feed',
+}
+
 def add_function(data: dict, function: str):
     if 'function' not in data:
         data['function'] = []
@@ -443,6 +449,26 @@ def tokenparse_svg(data: TokenParseState, info: dict, parent: dict) -> tuple[Tok
     result['contents'] = contents
     return data, info, result
 
+def get_accessible_name(info: dict, element: dict):
+    # https://w3c.github.io/accname/#computation-steps
+    if 'attrs' in element:
+        attrs = dict(element['attrs'])
+    else:
+        attrs = {}
+    # case 2.1 - hidden element - TODO
+    # case 2.2 - aria-labelledby - TODO
+    # case 2.3 - embedded control - TODO
+    # case 2.4 - aria-label
+    if attrs.get('aria-label') and attrs['aria-label'].strip() and element.get('kind') != 'slot':
+        # 2.4.1 says to ignore the content if this is an embedded control, but we'd already handle that earlier???
+        return attrs['aria-label']
+    # case 2.5 - element with textual representation in attribute, such as alt - TODO
+    # case 2.6 - name from content - TODO
+    # case 2.7 - text node - TODO
+    # case 2.8 - recursive name from content - TODO
+    # case 2.9 - tooltip - TODO
+    return None
+
 def tokenparse_html_content(data: TokenParseState, info: dict, parent: dict) -> tuple[TokenParseState, dict, dict | None]:
     # here we handle anything that could potentially be content: divs, paragraphs, spans, text, images
     token = data.peektoken()
@@ -462,8 +488,23 @@ def tokenparse_html_content(data: TokenParseState, info: dict, parent: dict) -> 
             unknown_token_list = []
             if token.attr_seq:
                 result['attrs'] = token.attr_seq
+            if 'rel' in token.attrs:
+                result['rel'] = token.attrs['rel'].split(' ')
+                for rel in result['rel']:
+                    if rel in ('home', 'publisher', 'feed'):
+                        add_function(result, rel)
+                        add_function(result, 'nav_link')
             data, info, contentlist = tokenparse_html_contentlist(data, info, result, 'a')
             result['contents'] = contentlist
+            if 'name' not in result:
+                accessible_name = get_accessible_name(info, result)
+                if accessible_name:
+                    result['name'] = accessible_name
+                # TODO: infer function from name?
+            if 'function' in result:
+                for function in result['function']:
+                    if function in function_names:
+                        result['generic_name'] = function_names[function]
             return data, info, result
         if token.tag == 'noscript':
             data = data.skiptoken()
