@@ -449,12 +449,38 @@ def tokenparse_svg(data: TokenParseState, info: dict, parent: dict) -> tuple[Tok
     result['contents'] = contents
     return data, info, result
 
-def get_accessible_name(info: dict, element: dict):
+# https://w3c.github.io/aria/#namefromprohibited
+_roles_which_cannot_be_named = { 'caption', 'code', 'definition', 'deletion', 'emphasis',
+    'generic', 'insertion', 'mark', 'none', 'paragraph', 'strong', 'subscript', 'suggestion',
+    'superscript', 'term', 'time' }
+
+# https://w3c.github.io/aria/#namefromcontent
+_roles_allowing_name_from_content = { 'button', 'cell', 'checkbox', 'columnheader', 'comment',
+    'gridcell', 'heading', 'link', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'option',
+    'radio', 'row', 'rowheader', 'switch', 'tab', 'tooltip', 'treeitem' }
+
+_implicit_roles = {
+    'data': 'text leaf',
+}
+
+def get_accessible_name(info: dict, element: dict, recursing: bool=False):
     # https://w3c.github.io/accname/#computation-steps
-    if 'attrs' in element:
+    if element.get('attrs'):
         attrs = dict(element['attrs'])
     else:
         attrs = {}
+    # figure out role
+    if 'role' in attrs:
+        role = attrs['role']
+    elif element['kind'] == 'anchor' and 'href' in attrs:
+        role = 'link'
+    elif element['kind'] in _implicit_roles:
+        role = _implicit_roles[element['kind']]
+    else:
+        role = 'generic'
+    # case 1 - role prohibits naming
+    if role in _roles_which_cannot_be_named and not recursing:
+        return None
     # case 2.1 - hidden element - TODO
     # case 2.2 - aria-labelledby - TODO
     # case 2.3 - embedded control - TODO
@@ -463,9 +489,22 @@ def get_accessible_name(info: dict, element: dict):
         # 2.4.1 says to ignore the content if this is an embedded control, but we'd already handle that earlier???
         return attrs['aria-label']
     # case 2.5 - element with textual representation in attribute, such as alt - TODO
-    # case 2.6 - name from content - TODO
+    # case 2.6 - name from content and case 2.8 - recursive name from content
+    if (role in _roles_allowing_name_from_content or recursing) and element.get('contents'):
+        # case 2.6.1 - name from content reset - TODO
+        result = []
+        # case 2.6.2 - name from generated content - TODO
+        # case 2.6.4 - name from each child
+        for item in element['contents']:
+            content_name = get_accessible_name(info, item, True)
+            if content_name is not None:
+                result.append(content_name)
+        # case 2.6.4 - return text if not empty
+        if result:
+            return ''.join(result)
     # case 2.7 - text node - TODO
-    # case 2.8 - recursive name from content - TODO
+    if element['kind'] == 'data':
+        return element['data']
     # case 2.9 - tooltip - TODO
     return None
 
